@@ -113,11 +113,35 @@ environment:
 
 ## Endpoints
 
+### HLS Endpoints (For VLC, Web Players)
 - `/` - Info page with available URLs
-- `/stream.m3u` - M3U playlist file
+- `/stream.m3u` - M3U playlist file (HLS)
 - `/playlist.m3u8` - HLS master playlist
 - `/proxy/<path>` - Proxied audio segments
+
+### Icecast Endpoints (For TuneIn, Radio Apps)
+- `/stream-icecast.m3u` - M3U playlist file (Icecast stream)
+- `/icecast` - Direct Icecast-compatible stream with ICY metadata
+- `/nowplaying` - JSON API for current track metadata
+
+### Other Endpoints
 - `/health` - Health check endpoint
+
+## Stream Format Compatibility
+
+**Use HLS endpoints for:**
+- VLC Media Player
+- Web browsers with HLS.js
+- iTunes/Apple Music
+- Most desktop media players
+
+**Use Icecast endpoint for:**
+- TuneIn Radio app
+- Radio apps that require ICY metadata
+- Apps that don't support HLS
+- Players that need artist/title/artwork metadata
+
+The Icecast endpoint converts the HLS stream to a continuous stream with embedded ICY metadata, which is what most radio apps expect.
 
 ## How It Works
 

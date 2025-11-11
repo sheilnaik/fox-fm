@@ -62,7 +62,7 @@ def get_base_url():
 
 @app.route('/stream.m3u')
 def serve_m3u():
-    """Serve the main M3U playlist file"""
+    """Serve the main M3U playlist file (HLS version)"""
     logger.info("Serving M3U playlist")
 
     base_url = get_base_url()
@@ -72,6 +72,155 @@ def serve_m3u():
 """
 
     return Response(m3u_content, mimetype='audio/x-mpegurl')
+
+
+@app.route('/stream-icecast.m3u')
+def serve_icecast_m3u():
+    """Serve M3U playlist file pointing to Icecast stream (for TuneIn, etc.)"""
+    logger.info("Serving Icecast M3U playlist")
+
+    base_url = get_base_url()
+    m3u_content = f"""#EXTM3U
+#EXTINF:-1,{STATION_NAME}
+{base_url}/icecast
+"""
+
+    return Response(m3u_content, mimetype='audio/x-mpegurl')
+
+
+@app.route('/icecast')
+def icecast_stream():
+    """
+    Serve a continuous ICY/Icecast-compatible stream with metadata
+    This converts the HLS stream to a continuous stream for apps like TuneIn
+    """
+    logger.info("Client connected to Icecast stream")
+
+    # Check if client supports ICY metadata
+    icy_metadata = request.headers.get('Icy-MetaData', '0') == '1'
+
+    def generate_stream():
+        """Generator that continuously fetches HLS segments and streams them"""
+        last_metadata = None
+        metaint = 16000  # Send metadata every 16KB (standard for Icecast)
+        byte_count = 0
+
+        while True:
+            try:
+                # Get current session URL
+                session_url = get_valid_session_url(STREAM_URL)
+
+                # Fetch the media playlist
+                response = requests.get(session_url, headers=DEFAULT_HEADERS, timeout=10)
+                response.raise_for_status()
+
+                playlist_content = response.text
+
+                # Extract metadata from playlist
+                current_metadata = None
+                for line in playlist_content.split('\n'):
+                    if line.startswith('#EXTINF:') and 'title=' in line and 'artist=' in line:
+                        if 'Asset' not in line:
+                            title_match = re.search(r'title="([^"]+)"', line)
+                            artist_match = re.search(r'artist="([^"]+)"', line)
+                            if title_match and artist_match:
+                                title = title_match.group(1)
+                                artist = artist_match.group(1)
+                                current_metadata = f"{artist} - {title}"
+                                break
+
+                if not current_metadata:
+                    current_metadata = f"{STATION_NAME} - Live Stream"
+
+                # Get segment URLs from playlist
+                segment_urls = []
+                stream_base_url = session_url.rsplit('/', 1)[0] + '/'
+
+                for line in playlist_content.split('\n'):
+                    line = line.strip()
+                    if line and not line.startswith('#') and '.aac' in line:
+                        if line.startswith('http'):
+                            segment_urls.append(line)
+                        else:
+                            segment_urls.append(urljoin(stream_base_url, line))
+
+                # Stream each segment
+                for segment_url in segment_urls:
+                    try:
+                        seg_response = requests.get(segment_url, headers=DEFAULT_HEADERS, stream=True, timeout=10)
+                        seg_response.raise_for_status()
+
+                        # Stream the segment in chunks
+                        for chunk in seg_response.iter_content(chunk_size=8192):
+                            if chunk:
+                                # If ICY metadata is supported, inject metadata every metaint bytes
+                                if icy_metadata:
+                                    chunk_pos = 0
+                                    while chunk_pos < len(chunk):
+                                        # Calculate how many bytes until next metadata
+                                        bytes_until_meta = metaint - byte_count
+
+                                        if bytes_until_meta <= len(chunk) - chunk_pos:
+                                            # Send audio data up to metadata point
+                                            yield chunk[chunk_pos:chunk_pos + bytes_until_meta]
+                                            chunk_pos += bytes_until_meta
+                                            byte_count = 0
+
+                                            # Send metadata if it changed
+                                            if current_metadata != last_metadata:
+                                                last_metadata = current_metadata
+
+                                            # Format ICY metadata
+                                            meta_str = f"StreamTitle='{current_metadata}';"
+                                            meta_len = len(meta_str)
+                                            # Metadata length is sent as length/16
+                                            meta_len_byte = bytes([meta_len // 16 + (1 if meta_len % 16 else 0)])
+                                            # Pad metadata to multiple of 16 bytes
+                                            padding = (16 - (meta_len % 16)) % 16
+                                            meta_data = meta_str.encode('utf-8') + (b'\x00' * padding)
+
+                                            yield meta_len_byte + meta_data
+                                        else:
+                                            # Send rest of chunk
+                                            yield chunk[chunk_pos:]
+                                            byte_count += len(chunk) - chunk_pos
+                                            break
+                                else:
+                                    # No ICY metadata, just send the chunk
+                                    yield chunk
+
+                    except requests.RequestException as e:
+                        logger.error(f"Error fetching segment {segment_url}: {e}")
+                        continue
+
+                # Small delay before fetching next playlist
+                time.sleep(0.5)
+
+            except Exception as e:
+                logger.error(f"Error in Icecast stream: {e}")
+                time.sleep(1)
+
+    # Build response headers
+    headers = {
+        'Content-Type': 'audio/aac',
+        'Cache-Control': 'no-cache',
+        'Connection': 'close',
+        'icy-name': STATION_NAME,
+        'icy-genre': 'Pop',
+        'icy-url': get_base_url(),
+        'icy-br': '128',
+        'icy-pub': '1',
+        'Access-Control-Allow-Origin': '*'
+    }
+
+    if icy_metadata:
+        headers['icy-metaint'] = '16000'
+
+    return Response(
+        stream_with_context(generate_stream()),
+        headers=headers,
+        direct_passthrough=True
+    )
 
 
 def get_valid_session_url(base_stream_url):
@@ -360,13 +509,23 @@ def index():
         <p>This proxy server allows you to access the Fox FM radio stream.</p>
 
         <h2>Stream URLs</h2>
+
+        <h3>HLS Streams (For VLC, Web Players)</h3>
         <ul>
             <li><strong>M3U Playlist:</strong> <a href="{base_url}/stream.m3u">{base_url}/stream.m3u</a></li>
             <li><strong>HLS Playlist:</strong> <a href="{base_url}/playlist.m3u8">{base_url}/playlist.m3u8</a></li>
         </ul>
 
+        <h3>Icecast Stream (For TuneIn, Radio Apps)</h3>
+        <ul>
+            <li><strong>Icecast M3U:</strong> <a href="{base_url}/stream-icecast.m3u">{base_url}/stream-icecast.m3u</a></li>
+            <li><strong>Direct Stream:</strong> <a href="{base_url}/icecast">{base_url}/icecast</a></li>
+        </ul>
+        <p><em>Use the Icecast URLs above for apps like TuneIn that require metadata support.</em></p>
+
         <h2>Usage</h2>
-        <p>Copy the M3U playlist URL above and paste it into your favorite media player (VLC, iTunes, etc.)</p>
+        <p><strong>For VLC/iTunes:</strong> Use the HLS M3U playlist URL<br>
+        <strong>For TuneIn/Radio Apps:</strong> Use the Icecast M3U playlist URL</p>
 
         <h2>Status</h2>
         <p>Server is running on port {PORT}</p>
