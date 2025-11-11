@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>🦊 101.9 Fox FM Melbourne</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d1810 100%);
+            color: #fff;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .player-container {
+            max-width: 600px;
+            width: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 107, 0, 0.2);
+        }
+
+        .station-logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .station-name {
+            font-size: 2em;
+            font-weight: bold;
+            color: #ff6b00;
+            text-shadow: 0 0 20px rgba(255, 107, 0, 0.5);
+        }
+
+        .album-art-container {
+            position: relative;
+            width: 100%;
+            max-width: 400px;
+            margin: 0 auto 30px;
+            aspect-ratio: 1;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        }
+
+        .album-art {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: opacity 0.5s ease;
+        }
+
+        .album-art.loading {
+            opacity: 0.5;
+        }
+
+        .placeholder-art {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #ff6b00 0%, #ff8c00 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 8em;
+        }
+
+        .track-info {
+            text-align: center;
+            margin-bottom: 30px;
+            min-height: 80px;
+        }
+
+        .track-title {
+            font-size: 1.8em;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+
+        .track-artist {
+            font-size: 1.3em;
+            color: #ff6b00;
+            margin-bottom: 5px;
+        }
+
+        .track-album {
+            font-size: 1em;
+            color: #999;
+        }
+
+        audio {
+            width: 100%;
+            margin: 20px 0;
+            border-radius: 10px;
+        }
+
+        .status {
+            text-align: center;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            margin: 15px 0;
+            font-size: 0.9em;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.live {
+            background: #44ff44;
+        }
+
+        .status-indicator.error {
+            background: #ff4444;
+            animation: none;
+        }
+
+        .status-indicator.loading {
+            background: #ffaa00;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+                box-shadow: 0 0 10px currentColor;
+            }
+            50% {
+                opacity: 0.5;
+                box-shadow: 0 0 20px currentColor;
+            }
+        }
+
+        .metadata {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 15px;
+            margin-top: 20px;
+            font-size: 0.85em;
+            font-family: monospace;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .metadata-title {
+            color: #ff6b00;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .metadata pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            color: #aaa;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #ff6b00 0%, #ff8c00 100%);
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(255, 107, 0, 0.5);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+</head>
+<body>
+    <div class="player-container">
+        <div class="station-logo">
+            <div class="station-name">🦊 101.9 Fox FM</div>
+            <div style="color: #999; margin-top: 5px;">Melbourne</div>
+        </div>
+
+        <div class="album-art-container">
+            <img id="albumArt" class="album-art" style="display: none;" alt="Album Art">
+            <div id="placeholderArt" class="placeholder-art">🦊</div>
+        </div>
+
+        <div class="track-info">
+            <div class="track-title" id="trackTitle">Loading...</div>
+            <div class="track-artist" id="trackArtist">101.9 Fox FM</div>
+            <div class="track-album" id="trackAlbum">Melbourne</div>
+        </div>
+
+        <audio id="audio" controls></audio>
+
+        <div class="status">
+            <span class="status-indicator loading" id="statusIndicator"></span>
+            <span id="statusText">Initializing...</span>
+        </div>
+
+        <div class="metadata">
+            <div class="metadata-title">📡 Stream Metadata</div>
+            <pre id="metadataContent">Waiting for data...</pre>
+        </div>
+    </div>
+
+    <script>
+        const audio = document.getElementById('audio');
+        const statusText = document.getElementById('statusText');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const trackTitle = document.getElementById('trackTitle');
+        const trackArtist = document.getElementById('trackArtist');
+        const trackAlbum = document.getElementById('trackAlbum');
+        const albumArt = document.getElementById('albumArt');
+        const placeholderArt = document.getElementById('placeholderArt');
+        const metadataContent = document.getElementById('metadataContent');
+
+        const streamUrl = 'http://localhost:8000/playlist.m3u8';
+        const nowPlayingUrl = 'http://localhost:8000/nowplaying';
+
+        function updateStatus(message, type = 'loading') {
+            statusText.textContent = message;
+            statusIndicator.className = `status-indicator ${type}`;
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function updateNowPlaying(data) {
+            if (data.title && data.artist) {
+                trackTitle.textContent = data.title;
+                trackArtist.textContent = data.artist;
+                trackAlbum.textContent = data.album || '101.9 Fox FM Melbourne';
+
+                if (data.artwork) {
+                    albumArt.src = data.artwork;
+                    albumArt.style.display = 'block';
+                    placeholderArt.style.display = 'none';
+                } else {
+                    albumArt.style.display = 'none';
+                    placeholderArt.style.display = 'flex';
+                }
+
+                // Update metadata display
+                metadataContent.textContent = JSON.stringify(data, null, 2);
+
+                // Update media session API for native controls
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: data.title,
+                        artist: data.artist,
+                        album: data.album || '101.9 Fox FM Melbourne',
+                        artwork: data.artwork ? [
+                            { src: data.artwork, sizes: '512x512', type: 'image/jpeg' }
+                        ] : []
+                    });
+                }
+            }
+        }
+
+        function fetchNowPlaying() {
+            fetch(nowPlayingUrl)
+                .then(res => res.json())
+                .then(data => {
+                    updateNowPlaying(data);
+                })
+                .catch(err => {
+                    console.error('Error fetching now playing:', err);
+                });
+        }
+
+        // Fetch now playing info every 10 seconds
+        fetchNowPlaying();
+        setInterval(fetchNowPlaying, 10000);
+
+        // Initialize HLS player
+        if (Hls.isSupported()) {
+            updateStatus('Loading stream...', 'loading');
+            const hls = new Hls({
+                debug: false,
+                enableWorker: true,
+                lowLatencyMode: false,
+                backBufferLength: 90
+            });
+
+            hls.loadSource(streamUrl);
+            hls.attachMedia(audio);
+
+            hls.on(Hls.Events.MANIFEST_PARSED, function() {
+                updateStatus('Stream ready - Click play to start', 'live');
+                audio.play().catch(e => {
+                    updateStatus('Ready (click play button)', 'live');
+                });
+            });
+
+            hls.on(Hls.Events.ERROR, function(event, data) {
+                console.error('HLS Error:', data);
+                if (data.fatal) {
+                    switch(data.type) {
+                        case Hls.ErrorTypes.NETWORK_ERROR:
+                            updateStatus('Network error: ' + data.details, 'error');
+                            hls.startLoad();
+                            break;
+                        case Hls.ErrorTypes.MEDIA_ERROR:
+                            updateStatus('Media error, recovering...', 'error');
+                            hls.recoverMediaError();
+                            break;
+                        default:
+                            updateStatus('Fatal error: ' + data.details, 'error');
+                            hls.destroy();
+                            break;
+                    }
+                }
+            });
+
+            hls.on(Hls.Events.FRAG_LOADED, function(event, data) {
+                // Fragment loaded successfully
+                if (audio.paused) {
+                    updateStatus('Buffered - Ready to play', 'live');
+                }
+            });
+
+        } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+            updateStatus('Loading stream (native HLS)...', 'loading');
+            audio.src = streamUrl;
+            audio.addEventListener('loadedmetadata', function() {
+                updateStatus('Stream ready - Click play to start', 'live');
+            });
+            audio.addEventListener('error', function(e) {
+                updateStatus('Error: ' + (audio.error?.message || 'Unknown error'), 'error');
+            });
+        } else {
+            updateStatus('HLS not supported in this browser', 'error');
+        }
+
+        audio.addEventListener('playing', function() {
+            updateStatus('🎵 Now Playing Live', 'live');
+        });
+
+        audio.addEventListener('pause', function() {
+            updateStatus('Paused', 'loading');
+        });
+
+        audio.addEventListener('waiting', function() {
+            updateStatus('Buffering...', 'loading');
+        });
+
+        // Handle visibility change - refresh metadata when tab becomes visible
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                fetchNowPlaying();
+            }
+        });
+    </script>
+</body>
+</html>
