@@ -301,22 +301,15 @@ def proxy_playlist():
             playlist_content = response.text
             stream_base_url = session_url.rsplit('/', 1)[0] + '/'
 
-        # Rewrite URLs and metadata in the playlist
+        # Rewrite URLs in the playlist (keep metadata unchanged for TuneIn compatibility)
         lines = []
         for line in playlist_content.split('\n'):
             line = line.strip()
 
-            # Rewrite #EXTINF metadata to replace Asset entries
-            if line.startswith('#EXTINF:') and 'title=' in line and 'artist=' in line:
-                # Check if this contains Asset metadata
-                if 'Asset' in line:
-                    # Replace Asset metadata with station info
-                    # Keep the duration, replace title and artist, remove artwork URL
-                    duration_match = re.search(r'#EXTINF:([\d.]+),', line)
-                    if duration_match:
-                        duration = duration_match.group(1)
-                        line = f'#EXTINF:{duration},title="{STATION_NAME}",artist="Melbourne\'s Hit Music"'
-                        logger.debug(f"Replaced Asset metadata in playlist")
+            # Keep #EXTINF metadata lines as-is (TuneIn reads these for artist/title)
+            if line.startswith('#EXTINF:'):
+                # Just pass through the metadata unchanged
+                pass
             elif line and not line.startswith('#'):
                 # This is a segment URL
                 if line.startswith('http'):

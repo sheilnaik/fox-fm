@@ -39,14 +39,17 @@ The server will start on `http://localhost:8000`
 
 ### 3. Use the Stream
 
-Open your media player (VLC, iTunes, etc.) and load:
-
+**For VLC, iTunes, and most players:**
 ```
 http://localhost:8000/stream.m3u
 ```
 
-Or access the HLS playlist directly:
+**For TuneIn and radio apps:**
+```
+http://localhost:8000/playlist.m3u8
+```
 
+**Direct HLS playlist access:**
 ```
 http://localhost:8000/playlist.m3u8
 ```
