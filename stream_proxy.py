@@ -66,8 +66,25 @@ def serve_m3u():
     logger.info("Serving M3U playlist")
 
     base_url = get_base_url()
+
+    # Try to get current track info
+    current_track = "Live Stream"
+    try:
+        session_url = get_valid_session_url(STREAM_URL)
+        response = requests.get(session_url, headers=DEFAULT_HEADERS, timeout=5)
+        for line in response.text.split('\n'):
+            if line.startswith('#EXTINF:') and 'title=' in line and 'artist=' in line:
+                if 'Asset' not in line:
+                    title_match = re.search(r'title="([^"]+)"', line)
+                    artist_match = re.search(r'artist="([^"]+)"', line)
+                    if title_match and artist_match:
+                        current_track = f"{artist_match.group(1)} - {title_match.group(1)}"
+                        break
+    except:
+        pass
+
     m3u_content = f"""#EXTM3U
-#EXTINF:-1,{STATION_NAME}
+#EXTINF:-1 tvg-logo="" radio="true",{STATION_NAME} - {current_track}
 {base_url}/playlist.m3u8
 """
 
@@ -336,14 +353,37 @@ def proxy_playlist():
 
         logger.debug(f"Modified playlist (first 500 chars):\n{modified_playlist[:500]}")
 
+        # Extract current track metadata for ICY headers
+        current_title = None
+        current_artist = None
+        for line in playlist_content.split('\n'):
+            if line.startswith('#EXTINF:') and 'title=' in line and 'artist=' in line:
+                if 'Asset' not in line:
+                    title_match = re.search(r'title="([^"]+)"', line)
+                    artist_match = re.search(r'artist="([^"]+)"', line)
+                    if title_match and artist_match:
+                        current_title = title_match.group(1)
+                        current_artist = artist_match.group(1)
+                        break
+
         # Create response and forward cookies from origin to client
+        # Add ICY headers that TuneIn might read
+        headers = {
+            'Cache-Control': 'no-cache',
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/vnd.apple.mpegurl'
+        }
+
+        # Add ICY metadata headers if we found track info
+        if current_title and current_artist:
+            headers['icy-name'] = STATION_NAME
+            headers['icy-description'] = f"{current_artist} - {current_title}"
+            headers['icy-genre'] = 'Pop'
+            headers['icy-url'] = get_base_url()
+
         resp = Response(
             modified_playlist,
-            mimetype='application/vnd.apple.mpegurl',
-            headers={
-                'Cache-Control': 'no-cache',
-                'Access-Control-Allow-Origin': '*'
-            }
+            headers=headers
         )
 
         # Forward Set-Cookie headers from origin by copying the raw header
